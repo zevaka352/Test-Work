@@ -1,4 +1,11 @@
 
+--
+--		this script adds chests that can be broken into and get rewards. It also provides a database that stores all the items.
+--
+
+
+-- Creating metatables --
+
 local ChestMetatable 				= {}
 ChestMetatable.__index				= ChestMetatable
 ChestMetatable.ClassName			= "ChestMetatable"
@@ -6,6 +13,8 @@ ChestMetatable.ClassName			= "ChestMetatable"
 local CachedStore 					= {}
 CachedStore.__index 				= CachedStore
 CachedStore.ClassName 				= "CachedStore"
+
+--
 
 local Debris 						= game:GetService("Debris")
 local TweenService 					= game:GetService("TweenService")
@@ -19,15 +28,23 @@ local Sounds 						= script.Sounds
 local Effects 						= script.Effects
 local Tools 						= script.Tools
 
-local eChestOpenEvent 				= ReplicatedStorage:WaitForChild("ChestOpenEvent")
-
+-- Config --
 local HOLD_DURATION_TIME = 6
 local TWEEN_TIME_ANIMATION = 0.3
 local CHEST_OPEN_TWEEN_TIME = 1
+--
 
 local itemsStore
 
+local ItemsTable = {}
+
+for _,v in pairs(Tools:GetChildren()) do
+	table.insert(ItemsTable, v)
+end
+
 function CreateEffect(effect, part, emit)
+	
+	-- Creating effects for chest --
 
 	local Attachment				= Instance.new("Attachment")
 	Attachment.CFrame 				= part.CFrame
@@ -48,12 +65,8 @@ function CreateEffect(effect, part, emit)
 end
 
 function ToolDropped()
-
-	local ItemsTable = {}
-
-	for _,v in pairs(Tools:GetChildren()) do
-		table.insert(ItemsTable, v)
-	end
+	
+	-- Getting Random tool --
 
 	while true do
 
@@ -72,6 +85,7 @@ end
 ---
 
 function CachedStore.new(store)
+	-- Creating Data store function
 	local self 				= setmetatable({}, CachedStore)
 	self.store 				= store
 	self.cache 				= {}
@@ -80,16 +94,10 @@ function CachedStore.new(store)
 	return self
 end
 
-
-function CachedStore:Remove(player)
-	player 						= tostring(player.userId)
-
-	self.cache[player] 			= nil
-	self.removeRequests[player] = true
-	self.saveRequests[player] 	= nil
-end
-
 function CachedStore:Save(player, value)
+	
+	-- Save value in data table -- self.cache[player] --
+	
 	player 						= tostring(player.userId)
 
 	self.cache[player] 			= value
@@ -99,6 +107,8 @@ function CachedStore:Save(player, value)
 end
 
 function CachedStore:Get(player)
+	
+	-- Get data table -- self.cache[player] --
 	player = tostring(player.userId)
 
 	if not self.cache[player] then
@@ -111,22 +121,10 @@ function CachedStore:Get(player)
 	return self.cache[player]
 end
 
-function CachedStore:PushRequests()
-	for player, remove in pairs(self.removeRequests) do
-		pcall(self.store.RemoveAsync, self.store, player)
-		self.removeRequests[player] = nil
-	end
-	for player, value in pairs(self.saveRequests) do
-		pcall(self.store.SetAsync, self.store, player, value)
-		self.saveRequests[player] = nil
-	end
-end
-
-function CachedStore:ClearCache()
-	table.clear(self.cache)
-end
-
 function CachedStore:PushPlayerRequests(player)
+	
+	-- Push data table in DataStore -- self.cache[player] --
+	
 	player = tostring(player.userId)
 
 	if self.saveRequests[player] then
@@ -147,21 +145,22 @@ ItemsStore							= CachedStore.new(itemsStore)
 ---
 
 function ChestMetatable.GetPlayerStore(player)
-
+	
+	-- this function getting player data store into CachedStore
 	local playerStore = ItemsStore:Get(player)
 
 	return playerStore
 
 end
 
-function ChestMetatable.new(model)
+function ChestMetatable.new(model) -- Create chest metatable
 
 	local self 						= setmetatable({}, ChestMetatable)
 
 	local Top 						= model:WaitForChild("Top")
 	local Chest 					= model:WaitForChild("Chest")
 
-	local ProximityPromt 					= Instance.new("ProximityPrompt")
+	local ProximityPromt 					= Instance.new("ProximityPrompt") -- Create Proximity
 	ProximityPromt.HoldDuration 			= HOLD_DURATION_TIME
 	ProximityPromt.RequiresLineOfSight 		= false
 	ProximityPromt.ActionText 				= "Open"
@@ -187,7 +186,7 @@ function ChestMetatable.new(model)
 	self.HackingStarted 			= false
 	self.HackingAnim 				= nil
 
-	self.connections = {
+	self.connections = { -- Create Chest connnections
 
 		self.ProximityPromt.PromptButtonHoldBegan:Connect(function(player)
 			self:ChestPromptButtonHoldBegan(player)
@@ -207,7 +206,7 @@ function ChestMetatable.new(model)
 
 end
 
-function ChestMetatable:ChestPromptButtonHoldBegan(player)
+function ChestMetatable:ChestPromptButtonHoldBegan(player) -- Chest Proximity Hold began 
 
 	if self.HackingStarted then
 		return
@@ -215,18 +214,19 @@ function ChestMetatable:ChestPromptButtonHoldBegan(player)
 
 	self.HackingStarted = true
 
+	-- check character --
 	if player.Character then
 		if player.Character:FindFirstChild("Humanoid") then
+			if player.Character.Humanoid:FindFirstChild("Animator") then
+				
+				if self.HackingAnim then
+					self.HackingAnim = nil
+				end
 
-			local humanoid = player.Character:FindFirstChild("Humanoid")
+				self.HackingAnim = player.Character.Humanoid:LoadAnimation(Animation) -- Load animation
+				self.HackingAnim:Play(TWEEN_TIME_ANIMATION, true)
 
-			if self.HackingAnim then
-				self.HackingAnim = nil
 			end
-
-			self.HackingAnim = humanoid:LoadAnimation(Animation)
-			self.HackingAnim:Play(TWEEN_TIME_ANIMATION, true)
-
 		end
 	end
 
@@ -236,7 +236,7 @@ function ChestMetatable:ChestPromptButtonHoldBegan(player)
 
 end
 
-function ChestMetatable:ChestPromptButtonHoldEnded(player)
+function ChestMetatable:ChestPromptButtonHoldEnded(player) -- Chest Proximity Hold ended 
 
 	self.HackingStarted = false
 
@@ -250,7 +250,7 @@ function ChestMetatable:ChestPromptButtonHoldEnded(player)
 
 end
 
-function ChestMetatable:ChestTriggerEnded(player)
+function ChestMetatable:ChestTriggerEnded(player) -- Chest Proximity trigger ended 
 
 	if self.HackingAnim then
 		self.HackingAnim:Stop()
@@ -267,22 +267,22 @@ function ChestMetatable:ChestTriggerEnded(player)
 
 	TweenService:Create(self.Top, TweenInfo.new(CHEST_OPEN_TWEEN_TIME), {CFrame = self.model.OpenTop.CFrame}):Play()
 
-	for _,v in pairs(Effects:GetChildren()) do
+	for _,v in pairs(Effects:GetChildren()) do -- Create chest effects
 		CreateEffect(v, self.Chest, 5)
 	end
 
-	local WinnerItem = ToolDropped():Clone()
+	local WinnerItem = ToolDropped():Clone() -- Random tool
 
 	WinnerItem.Parent = player.Backpack
 
-	local DataPlayerTable = ChestMetatable.GetPlayerStore(player)
+	local DataPlayerTable = ChestMetatable.GetPlayerStore(player) -- Get data store
 
 	if not DataPlayerTable then
 
 		local Tab = {}
 		table.insert(Tab, WinnerItem.Name)
 
-		ItemsStore:Save(player, Tab)
+		ItemsStore:Save(player, Tab) -- save data store
 
 	else
 
@@ -291,19 +291,40 @@ function ChestMetatable:ChestTriggerEnded(player)
 
 	end
 
-	ItemsStore:PushPlayerRequests(player)
-
-	eChestOpenEvent:FireClient(player, WinnerItem.Name)
+	ItemsStore:PushPlayerRequests(player) -- Push data store
+	
+	spawn(function() -- Destroy chest
+		task.wait(CHEST_OPEN_TWEEN_TIME)
+		self:Destroy()
+	end)
 
 end
 
-for _,v in pairs(workspace:WaitForChild("Chests"):GetChildren()) do
+function ChestMetatable:Destroy() -- Destroy chest
+
+	for i, connection in next, self.connections do
+		if connection and connection.Connected then
+			connection:Disconnect()
+		end
+	end
+	
+	self.model:Destroy()
+	
+	setmetatable(self, nil)
+	table.clear(self)
+	
+end
+
+for _,v in pairs(workspace:WaitForChild("Chests"):GetChildren()) do -- Create Chests
 	ChestMetatable.new(v)
 end
 
+
+local playerConnections = {}
+
 Players.PlayerAdded:Connect(function(player: Player)
 
-	player.CharacterAdded:Connect(function()
+	playerConnections[player] = player.CharacterAdded:Connect(function() -- Create Character connections
 
 		local PlayerTable = ChestMetatable.GetPlayerStore(player)
 
@@ -315,7 +336,7 @@ Players.PlayerAdded:Connect(function(player: Player)
 
 			if Tools:FindFirstChild(v) then
 
-				local tool = Tools[v]:Clone()
+				local tool = Tools[v]:Clone() -- Create a tool from the name of the item
 				tool.Parent = player.Backpack
 
 			end
@@ -323,4 +344,17 @@ Players.PlayerAdded:Connect(function(player: Player)
 		end
 	end)
 
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player) -- Clear Character connections
+	
+	if playerConnections[player] then
+		
+		if playerConnections[player].Connected then
+			playerConnections[player]:Disconnect()
+		end
+		
+		playerConnections[player] = nil
+	end
+	
 end)
